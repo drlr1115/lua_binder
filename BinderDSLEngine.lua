@@ -98,7 +98,7 @@ end
 indent = '    '
 
 function dump_line2tbl(tbl, ind_n, fmt, ...)
-    line = string.format(fmt, unpack(arg))
+    line = string.format(fmt, ...)
     table.insert(tbl, string.rep(indent, ind_n)..line)
 end
 
@@ -233,6 +233,8 @@ function generate_fun_list(t)
     for _, fun in pairs(t) do
         dump_line2tbl(text, 1, '{"%s", %s_wrapper},', fun.name, fun.name)
     end
+
+    dump_line2tbl(text, 1, '{NULL, NULL},')
 
     dump_line2tbl(text, 0, '};')
     return text

@@ -1,0 +1,21 @@
+MODULE("drv")
+
+INCLUDE_SYS("stdio.h")
+INCLUDE_SYS("stdlib.h")
+INCLUDE_SYS("string.h")
+
+EMBEDDED_TEXT([[
+static int reg_read(int bus, int id, int offset, char *buf, int len)
+{
+    printf("call reg_read with %d, %d, %d, %s, %d\n", bus, id, offset, buf, len);
+    
+    strcat(buf, "test");
+    return 0;
+}
+]])
+
+FUNCTION_DEF { 
+    declare = 'int reg_read(int bus, int id, int offset, char *buf, int len)',
+    output_args = {4},
+    arg_len = {[4] = 'arg5'}
+    }
