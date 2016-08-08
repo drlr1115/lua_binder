@@ -25,7 +25,7 @@ function MODULE(name)
 end
 
 function EMBEDDED_TEXT(text)
-    table.insert(embedded_text_tbl, text)
+    table.insert(content, text)
 end
 
 function FUNCTION_DEF(t)
@@ -83,36 +83,34 @@ function FUNCTION_DEF(t)
     
     fun_def = {['return_type'] = return_type, ['name'] = fun_name, ['args'] = args}
     table.insert(fun_tbl, fun_def)
+
+    generate_c_fun(fun_def)
 end
 
 function INCLUDE_SYS(f)
-    include_str = string.format("#include <%s>", f)
-    table.insert(include_tbl, include_str)
+    insert_line(0, "#include <%s>", f)
 end
 
 function INCLUDE(f)
-    include_str = string.format("#include \"%s\"", f)
-    table.insert(include_tbl, include_str)
+    insert_line(0, "#include \"%s\"", f)
 end
 
 indent = '    '
 
-function dump_line2tbl(tbl, ind_n, fmt, ...)
+function insert_line(ind_n, fmt, ...)
     line = string.format(fmt, ...)
-    table.insert(tbl, string.rep(indent, ind_n)..line)
+    table.insert(content, string.rep(indent, ind_n)..line)
 end
 
 function generate_c_fun(fun)
-    text = {}
-    dump_line2tbl(text, 0, '')
-    dump_line2tbl(text, 0, "static int %s_wrapper(lua_State *L)", fun.name)
-    dump_line2tbl(text, 0, '{')
+    name = string.format("static int %s_wrapper(lua_State *L)", fun.name)
+    FUNC_START(name)
 
-    dump_line2tbl(text, 1, "int n = lua_gettop(L);")
-    dump_line2tbl(text, 1, "if (n != %d) {", #fun.args)
-    dump_line2tbl(text, 2, "printf(\"ERROR: input argument number %%d\\n, expected %d\", n);", #fun.args)
-    dump_line2tbl(text, 2, "return -1;")
-    dump_line2tbl(text, 1, '}')
+    insert_line(1, "int n = lua_gettop(L);")
+    insert_line(1, "if (n != %d) {", #fun.args)
+    insert_line(2, "printf(\"ERROR: input argument number %%d\\n, expected %d\", n);", #fun.args)
+    insert_line(2, "return -1;")
+    insert_line(1, '}')
 
     for i, arg in pairs(fun.args) do
         lua_fun = ''
@@ -131,11 +129,11 @@ function generate_c_fun(fun)
         end
 
         if lua_fun then
-            dump_line2tbl(text, 1, '%s %s = %s(L, %d);', arg.type, arg.name, lua_fun, i)
+            insert_line(1, '%s %s = %s(L, %d);', arg.type, arg.name, lua_fun, i)
         end
     end
 
-    dump_line2tbl(text, 0, '')
+    insert_line(0, '')
     -- declear non char arg first, since char* may use other arg as len value
     for i, arg in pairs(fun.args) do
         if arg.type == 'char' and arg.is_pointer == true then
@@ -145,21 +143,21 @@ function generate_c_fun(fun)
             else
                 len = tostring(arg.len)
             end
-            dump_line2tbl(text, 1, 'char* %s = malloc(%s);', arg.name, len)
-            dump_line2tbl(text, 1, 'memset(%s, 0, %s);', arg.name, len)
-            dump_line2tbl(text, 1, 'strncpy(%s, lua_tostring(L, %d), %s - 1);', arg.name, i, len)
+            insert_line(1, 'char* %s = malloc(%s);', arg.name, len)
+            insert_line(1, 'memset(%s, 0, %s);', arg.name, len)
+            insert_line(1, 'strncpy(%s, lua_tostring(L, %d), %s - 1);', arg.name, i, len)
 
         end
     end
 
-    dump_line2tbl(text, 0, '')
+    insert_line(0, '')
     arg_name_tbl = {}
     for _, arg in pairs(fun.args) do
         table.insert(arg_name_tbl, arg.name)
     end
     arg_str = join_table(arg_name_tbl, ', ')
-    dump_line2tbl(text, 1, '%s ret = %s(%s);', fun.return_type, fun.name, arg_str)
-    dump_line2tbl(text, 0, '')
+    insert_line(1, '%s ret = %s(%s);', fun.return_type, fun.name, arg_str)
+    insert_line(0, '')
 
     lua_fun = ''
     if fun.return_type == 'int' then
@@ -177,7 +175,7 @@ function generate_c_fun(fun)
     end
 
     if lua_fun then
-        dump_line2tbl(text, 1, '%s(L, %s);', lua_fun, 'ret')
+        insert_line(1, '%s(L, %s);', lua_fun, 'ret')
     end
 
     for _, arg in pairs(fun.args) do
@@ -202,14 +200,14 @@ function generate_c_fun(fun)
                 arg.type))
                 return -1
             end
-            dump_line2tbl(text, 1, '%s(L, %s, %s);', lua_fun, arg.name, arg_len)
+            insert_line(1, '%s(L, %s, %s);', lua_fun, arg.name, arg_len)
         end
     end
 
-    dump_line2tbl(text, 0, '')
+    insert_line(0, '')
     for _, arg in pairs(fun.args) do
         if arg.type == 'char' and arg.is_pointer == true then
-            dump_line2tbl(text, 1, 'free(%s);', arg.name)
+            insert_line(1, 'free(%s);', arg.name)
         end
     end
 
@@ -219,37 +217,64 @@ function generate_c_fun(fun)
             output_count = output_count + 1
         end
     end
-    dump_line2tbl(text, 1, 'return %d;', output_count)
-    
-    dump_line2tbl(text, 0, '}')
+    insert_line(1, 'return %d;', output_count)
 
-    return text
+    FUNC_END()
 end
 
 function generate_fun_list(t)
-    text = {}
-    dump_line2tbl(text, 0, 'static const luaL_reg %s[] = {', module.name)
+    name = string.format('static const luaL_reg %s[] =', module.name)
+    STRUCT_START(name)
 
     for _, fun in pairs(t) do
-        dump_line2tbl(text, 1, '{"%s", %s_wrapper},', fun.name, fun.name)
+        insert_line(1, '{"%s", %s_wrapper},', fun.name, fun.name)
     end
 
-    dump_line2tbl(text, 1, '{NULL, NULL},')
+    insert_line(1, '{NULL, NULL},')
 
-    dump_line2tbl(text, 0, '};')
-    return text
+    STRUCT_END()
 end
 
 function generate_init_fun()
-    text = {}
-    dump_line2tbl(text, 0, 'int init_%s(lua_State* L)', module.name)
-    dump_line2tbl(text, 0, '{')
+    name = string.format('int init_%s(lua_State* L)', module.name)
+    FUNC_START(name)
 
-    dump_line2tbl(text, 1, 'luaL_register(L, "%s", %s);', module.name, module.name)
-    dump_line2tbl(text, 1, 'return 1;')
+    insert_line(1, 'luaL_register(L, "%s", %s);', module.name, module.name)
+    insert_line(1, 'return 1;')
 
-    dump_line2tbl(text, 0, '}')
-    return text
+    FUNC_END()
+end
+
+function STRUCT_START(name)
+    insert_line(0, '')
+    insert_line(0, 'static const luaL_reg %s[] =', module.name)
+    insert_line(0, '{')
+end
+
+function STRUCT_END()
+    insert_line(0, '};')
+    insert_line(0, '')
+end
+
+function FUNC_START(name)
+    insert_line(0, '')
+    insert_line(0, name)
+    insert_line(0, '{')
+end
+
+function FUNC_END()
+    insert_line(0, '}')
+    insert_line(0, '')
+end
+
+function remove_empty_tail_lines()
+    while( true ) do
+        if content[#content] == '' then
+            table.remove(content, #content)
+        else
+            break
+        end 
+    end
 end
 
 FILE_HEADER_TEMP = [[
