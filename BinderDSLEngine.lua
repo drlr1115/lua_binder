@@ -4,18 +4,62 @@
 --
 -----------------------------------------------------------------------------
 
-function print_tbl(t, ind)
-    if not ind then
-        ind = ''
-    end
-    for k, v in pairs(t) do
-        if type(v) == 'table' then
-            print(ind..k..'=table')
-            print_tbl(v, ind..'  ')
-        else
-            print(ind..k..'='..tostring(v), type(v))
-        end
-    end
+require "Utils"
+
+FILE_HEADER_TEMP = [[
+/*
+ *---------------------------------------------------------------------------
+ *
+ * #C_FILE_NAME#
+ *
+ * Description:
+ * This file is generated from #DEF_FILE_NAME#
+ * #FILE_DESCRIPTION#
+ *
+ * #COPYRIGHT#
+ *
+ *---------------------------------------------------------------------------
+ */
+]]
+
+INCLUDE_TEMP = [[
+
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
+]]
+
+local function STRUCT_START(name)
+    insert_line(0, '')
+    insert_line(0, 'static const luaL_reg %s[] =', module.name)
+    insert_line(0, '{')
+end
+
+local function STRUCT_END()
+    insert_line(0, '};')
+    insert_line(0, '')
+end
+
+local function FUNC_START(name)
+    insert_line(0, '')
+    insert_line(0, name)
+    insert_line(0, '{')
+end
+
+local function FUNC_END()
+    insert_line(0, '}')
+    insert_line(0, '')
+end
+
+function load_file(name)
+    insert_line(0, FILE_HEADER_TEMP)
+    insert_line(0, INCLUDE_TEMP)
+
+    dofile(name)
+
+    generate_fun_list(fun_tbl)
+    generate_init_fun()
+    remove_empty_tail_lines(content)
 end
 
 module = {}
@@ -24,15 +68,25 @@ function MODULE(name)
     module.name = name
 end
 
+function INCLUDE_SYS(f)
+    insert_line(0, "#include <%s>", f)
+end
+
+function INCLUDE(f)
+    insert_line(0, "#include \"%s\"", f)
+end
+
 function EMBEDDED_TEXT(text)
     table.insert(content, text)
 end
 
 function FUNCTION_DEF(t)
+    --[[
     print('DUMP: table content:')
     for k, v in pairs(t) do
         print(k ,"=", v)
     end
+    ]]
     if not t.declare then
         print("Error: no declare definition")
         return
@@ -85,14 +139,6 @@ function FUNCTION_DEF(t)
     table.insert(fun_tbl, fun_def)
 
     generate_c_fun(fun_def)
-end
-
-function INCLUDE_SYS(f)
-    insert_line(0, "#include <%s>", f)
-end
-
-function INCLUDE(f)
-    insert_line(0, "#include \"%s\"", f)
 end
 
 indent = '    '
@@ -243,85 +289,4 @@ function generate_init_fun()
     insert_line(1, 'return 1;')
 
     FUNC_END()
-end
-
-function STRUCT_START(name)
-    insert_line(0, '')
-    insert_line(0, 'static const luaL_reg %s[] =', module.name)
-    insert_line(0, '{')
-end
-
-function STRUCT_END()
-    insert_line(0, '};')
-    insert_line(0, '')
-end
-
-function FUNC_START(name)
-    insert_line(0, '')
-    insert_line(0, name)
-    insert_line(0, '{')
-end
-
-function FUNC_END()
-    insert_line(0, '}')
-    insert_line(0, '')
-end
-
-function remove_empty_tail_lines()
-    while( true ) do
-        if content[#content] == '' then
-            table.remove(content, #content)
-        else
-            break
-        end 
-    end
-end
-
-FILE_HEADER_TEMP = [[
-/*
- *---------------------------------------------------------------------------
- *
- * #C_FILE_NAME#
- *
- * Description:
- * This file is generated from #DEF_FILE_NAME#
- * #FILE_DESCRIPTION#
- *
- * #COPYRIGHT#
- *
- *---------------------------------------------------------------------------
- */
-]]
-
-INCLUDE_TEMP = [[
-
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
-]]
-
-function join_table(t, sep)
-    if not sep then
-        sep = ' '
-    end
-    local content = ''
-    first = true
-    for _, v in pairs(t) do
-        if first then
-            content = content .. v
-            first = false
-        else
-            content = content .. sep .. v
-        end
-    end
-    return content
-end
-
-function write2file(f, str)
-    f:write(str)
-end
-
-function write_tbl2file(f, t)
-    write2file(f, join_table(t, '\n'))
-    write2file(f, '\n')
 end

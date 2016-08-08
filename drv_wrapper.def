@@ -18,4 +18,4 @@ FUNCTION_DEF {
     declare = 'int reg_read(int bus, int id, int offset, char *buf, int len)',
     output_args = {4},
     arg_len = {[4] = 'arg5'}
-    }
+}
