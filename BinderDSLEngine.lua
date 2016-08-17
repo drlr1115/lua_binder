@@ -30,33 +30,44 @@ INCLUDE_TEMP = [[
 ]]
 
 local function STRUCT_START(name)
-    insert_line(0, '')
-    insert_line(0, 'static const luaL_reg %s[] =', module.name)
-    insert_line(0, '{')
+    pushback_line(0, '')
+    pushback_line(0, 'static const luaL_reg %s[] =', module.name)
+    pushback_line(0, '{')
 end
 
 local function STRUCT_END()
-    insert_line(0, '};')
-    insert_line(0, '')
+    pushback_line(0, '};')
+    pushback_line(0, '')
 end
 
 local function FUNC_START(name)
-    insert_line(0, '')
-    insert_line(0, name)
-    insert_line(0, '{')
+    pushback_line(0, '')
+    pushback_line(0, name)
+    pushback_line(0, '{')
 end
 
 local function FUNC_END()
-    insert_line(0, '}')
-    insert_line(0, '')
+    pushback_line(0, '}')
+    pushback_line(0, '')
 end
 
-function load_file(name)
-    insert_line(0, FILE_HEADER_TEMP)
-    insert_line(0, INCLUDE_TEMP)
+local function populate_from_temp(template, t)
+    return string.gsub(template, "#([%w_]+)#", t)
+end
 
-    dofile(name)
+local function populate_file_header(input, output)
+    module['C_FILE_NAME'] = output
+    module['DEF_FILE_NAME'] = input
+    return populate_from_temp(FILE_HEADER_TEMP, module)
+end
 
+function load_file(input, output)
+    pushback_line(0, INCLUDE_TEMP)
+
+    dofile(input)
+
+    FILE_HEADER_TEMP = populate_file_header(input, output)
+    pushfront_line(0, FILE_HEADER_TEMP)
     generate_fun_list(fun_tbl)
     generate_init_fun()
     remove_empty_tail_lines(content)
@@ -68,12 +79,20 @@ function MODULE(name)
     module.name = name
 end
 
+function DESCRIPTION(str)
+    module['FILE_DESCRIPTION'] = str
+end
+
+function COPYRIGHT(str)
+    module['COPYRIGHT'] = str
+end
+
 function INCLUDE_SYS(f)
-    insert_line(0, "#include <%s>", f)
+    pushback_line(0, "#include <%s>", f)
 end
 
 function INCLUDE(f)
-    insert_line(0, "#include \"%s\"", f)
+    pushback_line(0, "#include \"%s\"", f)
 end
 
 function EMBEDDED_TEXT(text)
@@ -143,7 +162,12 @@ end
 
 indent = '    '
 
-function insert_line(ind_n, fmt, ...)
+function pushfront_line(ind_n, fmt, ...)
+    line = string.format(fmt, ...)
+    table.insert(content, 1, string.rep(indent, ind_n)..line)
+end
+
+function pushback_line(ind_n, fmt, ...)
     line = string.format(fmt, ...)
     table.insert(content, string.rep(indent, ind_n)..line)
 end
@@ -152,11 +176,11 @@ function generate_c_fun(fun)
     name = string.format("static int %s_wrapper(lua_State *L)", fun.name)
     FUNC_START(name)
 
-    insert_line(1, "int n = lua_gettop(L);")
-    insert_line(1, "if (n != %d) {", #fun.args)
-    insert_line(2, "printf(\"ERROR: input argument number %%d\\n, expected %d\", n);", #fun.args)
-    insert_line(2, "return -1;")
-    insert_line(1, '}')
+    pushback_line(1, "int n = lua_gettop(L);")
+    pushback_line(1, "if (n != %d) {", #fun.args)
+    pushback_line(2, "printf(\"ERROR: input argument number %%d\\n, expected %d\", n);", #fun.args)
+    pushback_line(2, "return -1;")
+    pushback_line(1, '}')
 
     for i, arg in pairs(fun.args) do
         lua_fun = ''
@@ -175,11 +199,11 @@ function generate_c_fun(fun)
         end
 
         if lua_fun then
-            insert_line(1, '%s %s = %s(L, %d);', arg.type, arg.name, lua_fun, i)
+            pushback_line(1, '%s %s = %s(L, %d);', arg.type, arg.name, lua_fun, i)
         end
     end
 
-    insert_line(0, '')
+    pushback_line(0, '')
     -- declear non char arg first, since char* may use other arg as len value
     for i, arg in pairs(fun.args) do
         if arg.type == 'char' and arg.is_pointer == true then
@@ -189,21 +213,21 @@ function generate_c_fun(fun)
             else
                 len = tostring(arg.len)
             end
-            insert_line(1, 'char* %s = malloc(%s);', arg.name, len)
-            insert_line(1, 'memset(%s, 0, %s);', arg.name, len)
-            insert_line(1, 'strncpy(%s, lua_tostring(L, %d), %s - 1);', arg.name, i, len)
+            pushback_line(1, 'char* %s = malloc(%s);', arg.name, len)
+            pushback_line(1, 'memset(%s, 0, %s);', arg.name, len)
+            pushback_line(1, 'strncpy(%s, lua_tostring(L, %d), %s - 1);', arg.name, i, len)
 
         end
     end
 
-    insert_line(0, '')
+    pushback_line(0, '')
     arg_name_tbl = {}
     for _, arg in pairs(fun.args) do
         table.insert(arg_name_tbl, arg.name)
     end
     arg_str = join_table(arg_name_tbl, ', ')
-    insert_line(1, '%s ret = %s(%s);', fun.return_type, fun.name, arg_str)
-    insert_line(0, '')
+    pushback_line(1, '%s ret = %s(%s);', fun.return_type, fun.name, arg_str)
+    pushback_line(0, '')
 
     lua_fun = ''
     if fun.return_type == 'int' then
@@ -221,7 +245,7 @@ function generate_c_fun(fun)
     end
 
     if lua_fun then
-        insert_line(1, '%s(L, %s);', lua_fun, 'ret')
+        pushback_line(1, '%s(L, %s);', lua_fun, 'ret')
     end
 
     for _, arg in pairs(fun.args) do
@@ -246,14 +270,14 @@ function generate_c_fun(fun)
                 arg.type))
                 return -1
             end
-            insert_line(1, '%s(L, %s, %s);', lua_fun, arg.name, arg_len)
+            pushback_line(1, '%s(L, %s, %s);', lua_fun, arg.name, arg_len)
         end
     end
 
-    insert_line(0, '')
+    pushback_line(0, '')
     for _, arg in pairs(fun.args) do
         if arg.type == 'char' and arg.is_pointer == true then
-            insert_line(1, 'free(%s);', arg.name)
+            pushback_line(1, 'free(%s);', arg.name)
         end
     end
 
@@ -263,7 +287,7 @@ function generate_c_fun(fun)
             output_count = output_count + 1
         end
     end
-    insert_line(1, 'return %d;', output_count)
+    pushback_line(1, 'return %d;', output_count)
 
     FUNC_END()
 end
@@ -273,10 +297,10 @@ function generate_fun_list(t)
     STRUCT_START(name)
 
     for _, fun in pairs(t) do
-        insert_line(1, '{"%s", %s_wrapper},', fun.name, fun.name)
+        pushback_line(1, '{"%s", %s_wrapper},', fun.name, fun.name)
     end
 
-    insert_line(1, '{NULL, NULL},')
+    pushback_line(1, '{NULL, NULL},')
 
     STRUCT_END()
 end
@@ -285,8 +309,8 @@ function generate_init_fun()
     name = string.format('int init_%s(lua_State* L)', module.name)
     FUNC_START(name)
 
-    insert_line(1, 'luaL_register(L, "%s", %s);', module.name, module.name)
-    insert_line(1, 'return 1;')
+    pushback_line(1, 'luaL_register(L, "%s", %s);', module.name, module.name)
+    pushback_line(1, 'return 1;')
 
     FUNC_END()
 end

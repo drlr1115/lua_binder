@@ -17,7 +17,7 @@ function main()
     output = arg[2]
     fun_tbl = {}
     content = {}
-    load_file(input)
+    load_file(input, output)
 
     if debug then
         print_tbl(fun_tbl)

@@ -1,4 +1,6 @@
 MODULE("drv")
+DESCRIPTION("drv c api lua wrapper.")
+COPYRIGHT("Copyright (c) 2016 XXXXXX Corporation")
 
 INCLUDE_SYS("stdio.h")
 INCLUDE_SYS("stdlib.h")
