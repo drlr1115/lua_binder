@@ -29,6 +29,18 @@ INCLUDE_TEMP = [[
 #include <lauxlib.h>
 ]]
 
+
+local INDENT = '    '
+
+local function pushfront_line(ind_n, fmt, ...)
+    line = string.format(fmt, ...)
+    table.insert(content, 1, string.rep(INDENT, ind_n)..line)
+end
+
+local function pushback_line(ind_n, fmt, ...)
+    line = string.format(fmt, ...)
+    table.insert(content, string.rep(INDENT, ind_n)..line)
+end
 local function STRUCT_START(name)
     pushback_line(0, '')
     pushback_line(0, 'static const luaL_reg %s[] =', module.name)
@@ -51,128 +63,7 @@ local function FUNC_END()
     pushback_line(0, '')
 end
 
-local function populate_from_temp(template, t)
-    return string.gsub(template, "#([%w_]+)#", t)
-end
-
-local function populate_file_header(input, output)
-    module['C_FILE_NAME'] = output
-    module['DEF_FILE_NAME'] = input
-    return populate_from_temp(FILE_HEADER_TEMP, module)
-end
-
-function load_file(input, output)
-    pushback_line(0, INCLUDE_TEMP)
-
-    dofile(input)
-
-    FILE_HEADER_TEMP = populate_file_header(input, output)
-    pushfront_line(0, FILE_HEADER_TEMP)
-    generate_fun_list(fun_tbl)
-    generate_init_fun()
-    remove_empty_tail_lines(content)
-end
-
-module = {}
-
-function MODULE(name)
-    module.name = name
-end
-
-function DESCRIPTION(str)
-    module['FILE_DESCRIPTION'] = str
-end
-
-function COPYRIGHT(str)
-    module['COPYRIGHT'] = str
-end
-
-function INCLUDE_SYS(f)
-    pushback_line(0, "#include <%s>", f)
-end
-
-function INCLUDE(f)
-    pushback_line(0, "#include \"%s\"", f)
-end
-
-function EMBEDDED_TEXT(text)
-    table.insert(content, text)
-end
-
-function FUNCTION_DEF(t)
-    --[[
-    print('DUMP: table content:')
-    for k, v in pairs(t) do
-        print(k ,"=", v)
-    end
-    ]]
-    if not t.declare then
-        print("Error: no declare definition")
-        return
-    end
-
-    return_type, fun_name, arg_str = string.match(t.declare, '([%w_]+)%s+([%w_]+)%s*%((.*)%)')
-
-    not_void = string.match(arg_str, '([%w_]+)')
-    args = {}
-    if not_void then
-        for arg_type, arg_name in string.gmatch(arg_str, '([%w_%*]+)%s+([%w_%*]+)%s*[,]-') do
-            is_pointer = false
-            if string.find(arg_type, '%*') then
-                arg_type = string.gsub(arg_type, '%*', '')
-                is_pointer = true
-            end
-            if string.find(arg_name, '%*') then
-                arg_name = string.gsub(arg_name, '%*', '')
-                is_pointer = true
-            end
-
-            table.insert(args, {['type'] = arg_type, ['name'] = arg_name, ['is_pointer'] = is_pointer, ['output'] = false})
-        end
-    end
-    
-    if t.output_args then
-        for _, v in pairs(t.output_args) do
-            if type(args[v]) == 'table' then
-                args[v].output = true
-            end
-        end
-    end
-    
-    if t.arg_len then
-        for k, v in pairs(t.arg_len) do
-            if type(args[k]) == 'table' then
-                if type(v) == 'string' then
-                    args[k].len = string.match(v, 'arg(%d+)')
-                elseif type(v) == 'number' then
-                    args[k].len = v
-                else
-                    print("Error: invalid type of value in arg_len")
-                    return
-                end
-            end
-        end
-    end
-    
-    fun_def = {['return_type'] = return_type, ['name'] = fun_name, ['args'] = args}
-    table.insert(fun_tbl, fun_def)
-
-    generate_c_fun(fun_def)
-end
-
-indent = '    '
-
-function pushfront_line(ind_n, fmt, ...)
-    line = string.format(fmt, ...)
-    table.insert(content, 1, string.rep(indent, ind_n)..line)
-end
-
-function pushback_line(ind_n, fmt, ...)
-    line = string.format(fmt, ...)
-    table.insert(content, string.rep(indent, ind_n)..line)
-end
-
-function generate_c_fun(fun)
+local function generate_c_fun(fun)
     name = string.format("static int %s_wrapper(lua_State *L)", fun.name)
     FUNC_START(name)
 
@@ -292,7 +183,7 @@ function generate_c_fun(fun)
     FUNC_END()
 end
 
-function generate_fun_list(t)
+local function generate_fun_list(t)
     name = string.format('static const luaL_reg %s[] =', module.name)
     STRUCT_START(name)
 
@@ -305,7 +196,7 @@ function generate_fun_list(t)
     STRUCT_END()
 end
 
-function generate_init_fun()
+local function generate_init_fun()
     name = string.format('int init_%s(lua_State* L)', module.name)
     FUNC_START(name)
 
@@ -313,4 +204,115 @@ function generate_init_fun()
     pushback_line(1, 'return 1;')
 
     FUNC_END()
+end
+
+local function populate_from_temp(template, t)
+    return string.gsub(template, "#([%w_]+)#", t)
+end
+
+local function populate_file_header(input, output)
+    module['C_FILE_NAME'] = output
+    module['DEF_FILE_NAME'] = input
+    return populate_from_temp(FILE_HEADER_TEMP, module)
+end
+
+module = {}
+
+function MODULE(name)
+    module.name = name
+end
+
+function DESCRIPTION(str)
+    module['FILE_DESCRIPTION'] = str
+end
+
+function COPYRIGHT(str)
+    module['COPYRIGHT'] = str
+end
+
+function INCLUDE_SYS(f)
+    pushback_line(0, "#include <%s>", f)
+end
+
+function INCLUDE(f)
+    pushback_line(0, "#include \"%s\"", f)
+end
+
+function EMBEDDED_TEXT(text)
+    table.insert(content, text)
+end
+
+function FUNCTION_DEF(t)
+    --[[
+    print('DUMP: table content:')
+    for k, v in pairs(t) do
+        print(k ,"=", v)
+    end
+    ]]
+    if not t.declare then
+        print("Error: no declare definition")
+        return
+    end
+
+    return_type, fun_name, arg_str = string.match(t.declare, '([%w_]+)%s+([%w_]+)%s*%((.*)%)')
+
+    not_void = string.match(arg_str, '([%w_]+)')
+    args = {}
+    if not_void then
+        for arg_type, arg_name in string.gmatch(arg_str, '([%w_%*]+)%s+([%w_%*]+)%s*[,]-') do
+            is_pointer = false
+            if string.find(arg_type, '%*') then
+                arg_type = string.gsub(arg_type, '%*', '')
+                is_pointer = true
+            end
+            if string.find(arg_name, '%*') then
+                arg_name = string.gsub(arg_name, '%*', '')
+                is_pointer = true
+            end
+
+            table.insert(args, {['type'] = arg_type, ['name'] = arg_name, ['is_pointer'] = is_pointer, ['output'] = false})
+        end
+    end
+    
+    if t.output_args then
+        for _, v in pairs(t.output_args) do
+            if type(args[v]) == 'table' then
+                args[v].output = true
+            end
+        end
+    end
+    
+    if t.arg_len then
+        for k, v in pairs(t.arg_len) do
+            if type(args[k]) == 'table' then
+                if type(v) == 'string' then
+                    args[k].len = string.match(v, 'arg(%d+)')
+                elseif type(v) == 'number' then
+                    args[k].len = v
+                else
+                    print("Error: invalid type of value in arg_len")
+                    return
+                end
+            end
+        end
+    end
+    
+    fun_def = {['return_type'] = return_type, ['name'] = fun_name, ['args'] = args}
+    table.insert(fun_tbl, fun_def)
+
+    generate_c_fun(fun_def)
+end
+
+
+
+function load_file(input, output)
+    pushback_line(0, INCLUDE_TEMP)
+
+    dofile(input)
+
+    FILE_HEADER_TEMP = populate_file_header(input, output)
+    pushfront_line(0, FILE_HEADER_TEMP)
+    generate_fun_list(fun_tbl)
+    generate_init_fun()
+    remove_empty_tail_lines(content)
 end
